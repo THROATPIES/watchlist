@@ -29,16 +29,12 @@ jobs:
             const fs = require('fs');
             const content = fs.readFileSync('watchlist.md', 'utf8');
             
-            // Parse sections with fixed regex
+            // Parse sections
             const watchSection = content.split('## 📺 Watch')[1].split('## 🎬 In Progress')[0].trim();
             const inProgressSection = content.split('## 🎬 In Progress')[1].split('## ✅ Completed')[0].trim();
             const completedSection = content.split('## ✅ Completed')[1]?.trim() || '';
             
-            console.log('Watch section:', watchSection);
-            console.log('In Progress section:', inProgressSection);
-            console.log('Completed section:', completedSection);
-            
-            // Extract items with fixed regex
+            // Extract items
             const watchItems = (watchSection.match(/- \[ \] (.*?)(?=\n|$)/g) || [])
               .map(item => item.replace('- [ ] ', '').trim());
             const inProgressItems = (inProgressSection.match(/- \[.\] (.*?)(?=\n|$)/g) || [])
@@ -46,27 +42,18 @@ jobs:
             const completedItems = (completedSection.match(/- \[x\] (.*?)(?=\n|$)/g) || [])
               .map(item => item.replace('- [x] ', '').trim());
             
-            console.log('Watch items:', watchItems);
-            console.log('In Progress items:', inProgressItems);
-            console.log('Completed items:', completedItems);
-
             const addToProject = async (title, status) => {
               console.log(`Attempting to add item: "${title}" with status: "${status}"`);
-              // Escape special characters in the title
               const escapedTitle = title.replace(/"/g, '\\"');
-              const mutation = `
+              
+              // First, create the item
+              const createMutation = `
                 mutation {
-                  createProjectV2Item(input: {
+                  addProjectV2DraftIssue(input: {
                     projectId: "PVT_kwHOCw13Q84Ay6MG"
                     title: "${escapedTitle}"
-                    fieldValues: [
-                      {
-                        projectV2CustomFieldId: "PVTSSF_lAHOCw13Q84Ay6MGzgoySwo"
-                        value: "${status}"
-                      }
-                    ]
                   }) {
-                    projectV2Item {
+                    projectItem {
                       id
                     }
                   }
@@ -74,11 +61,31 @@ jobs:
               `;
               
               try {
-                const result = await github.graphql(mutation);
-                console.log('Successfully added item:', title, 'with status:', status);
-                console.log('Result:', JSON.stringify(result, null, 2));
+                const result = await github.graphql(createMutation);
+                const itemId = result.addProjectV2DraftIssue.projectItem.id;
+                console.log('Created item:', itemId);
+                
+                // Then update its status
+                const updateMutation = `
+                  mutation {
+                    updateProjectV2ItemFieldValue(input: {
+                      projectId: "PVT_kwHOCw13Q84Ay6MG"
+                      itemId: "${itemId}"
+                      fieldId: "PVTSSF_lAHOCw13Q84Ay6MGzgoySwo"
+                      value: "${status}"
+                    }) {
+                      projectV2Item {
+                        id
+                      }
+                    }
+                  }
+                `;
+                
+                await github.graphql(updateMutation);
+                console.log('Successfully updated status for:', title);
+                
               } catch (error) {
-                console.error('Error adding item:', title);
+                console.error('Error processing item:', title);
                 console.error('Error details:', JSON.stringify(error, null, 2));
                 throw error;
               }
