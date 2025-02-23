@@ -41,10 +41,44 @@ jobs:
               .map(item => item.replace(/- \[.\] /, '').trim());
             const completedItems = (completedSection.match(/- \[x\] (.*?)(?=\n|$)/g) || [])
               .map(item => item.replace('- [x] ', '').trim());
+
+            // First, get the status field options
+            const getStatusFieldOptions = async () => {
+              const query = `
+                query {
+                  node(id: "PVT_kwHOCw13Q84Ay6MG") {
+                    ... on ProjectV2 {
+                      field(name: "Status") {
+                        ... on ProjectV2SingleSelectField {
+                          options {
+                            id
+                            name
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              `;
+              
+              const result = await github.graphql(query);
+              return result.node.field.options;
+            };
+
+            const statusOptions = await getStatusFieldOptions();
+            const getOptionId = (name) => {
+              const option = statusOptions.find(opt => opt.name === name);
+              return option ? option.id : null;
+            };
             
             const addToProject = async (title, status) => {
               console.log(`Attempting to add item: "${title}" with status: "${status}"`);
               const escapedTitle = title.replace(/"/g, '\\"');
+              const statusOptionId = getOptionId(status);
+              
+              if (!statusOptionId) {
+                throw new Error(`Status option not found: ${status}`);
+              }
               
               // First, create the item
               const createMutation = `
@@ -72,7 +106,7 @@ jobs:
                       projectId: "PVT_kwHOCw13Q84Ay6MG"
                       itemId: "${itemId}"
                       fieldId: "PVTSSF_lAHOCw13Q84Ay6MGzgoySwo"
-                      value: "${status}"
+                      value: { singleSelectOptionId: "${statusOptionId}" }
                     }) {
                       projectV2Item {
                         id
