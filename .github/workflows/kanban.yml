@@ -35,11 +35,11 @@ jobs:
               const mutation = `
                 mutation {
                   createProjectV2Item(input: {
-                    projectId: "YOUR_PROJECT_ID"
+                    projectId: "1"
                     title: "${title}"
                     fieldValues: [
                       {
-                        projectV2CustomFieldId: "YOUR_STATUS_FIELD_ID"
+                        projectV2CustomFieldId: "PVTSSF_lAHOCw13Q84Ay6MGzgoySwo"
                         value: "${status}"
                       }
                     ]
