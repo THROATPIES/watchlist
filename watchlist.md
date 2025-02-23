@@ -7,5 +7,6 @@
  - [ ] The Thirteen Lives `movie`
  - [ ] The Banker `movie` 
  - [ ] Mom `show`  
+ - [ ] Superwog `show`  
 ## 🎬 In Progress
 ## ✅ Completed
