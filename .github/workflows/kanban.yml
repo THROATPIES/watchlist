@@ -29,31 +29,36 @@ jobs:
             const fs = require('fs');
             const content = fs.readFileSync('watchlist.md', 'utf8');
             
-            // Parse sections
-            const watchSection = content.match(/## 📺 Watch\n\n([\s\S]*?)(?=\n## |$)/)?.[1] || '';
-            const inProgressSection = content.match(/## 🎬 In Progress\n\n([\s\S]*?)(?=\n## |$)/)?.[1] || '';
-            const completedSection = content.match(/## ✅ Completed\n\n([\s\S]*?)(?=\n## |$)/)?.[1] || '';
+            // Parse sections with fixed regex
+            const watchSection = content.split('## 📺 Watch')[1].split('## 🎬 In Progress')[0].trim();
+            const inProgressSection = content.split('## 🎬 In Progress')[1].split('## ✅ Completed')[0].trim();
+            const completedSection = content.split('## ✅ Completed')[1]?.trim() || '';
             
             console.log('Watch section:', watchSection);
             console.log('In Progress section:', inProgressSection);
             console.log('Completed section:', completedSection);
             
-            // Extract items
-            const watchItems = watchSection.match(/- \[ \] (.*)/g)?.map(item => item.replace('- [ ] ', '')) || [];
-            const inProgressItems = inProgressSection.match(/- \[.\] (.*)/g)?.map(item => item.replace('- [.] ', '')) || [];
-            const completedItems = completedSection.match(/- \[x\] (.*)/g)?.map(item => item.replace('- [x] ', '')) || [];
+            // Extract items with fixed regex
+            const watchItems = (watchSection.match(/- \[ \] (.*?)(?=\n|$)/g) || [])
+              .map(item => item.replace('- [ ] ', '').trim());
+            const inProgressItems = (inProgressSection.match(/- \[.\] (.*?)(?=\n|$)/g) || [])
+              .map(item => item.replace(/- \[.\] /, '').trim());
+            const completedItems = (completedSection.match(/- \[x\] (.*?)(?=\n|$)/g) || [])
+              .map(item => item.replace('- [x] ', '').trim());
             
             console.log('Watch items:', watchItems);
             console.log('In Progress items:', inProgressItems);
             console.log('Completed items:', completedItems);
 
-            // GraphQL mutation to add items to project
             const addToProject = async (title, status) => {
+              console.log(`Attempting to add item: "${title}" with status: "${status}"`);
+              // Escape special characters in the title
+              const escapedTitle = title.replace(/"/g, '\\"');
               const mutation = `
                 mutation {
                   createProjectV2Item(input: {
                     projectId: "PVT_kwHOCw13Q84Ay6MG"
-                    title: "${title}"
+                    title: "${escapedTitle}"
                     fieldValues: [
                       {
                         projectV2CustomFieldId: "PVTSSF_lAHOCw13Q84Ay6MGzgoySwo"
@@ -70,23 +75,32 @@ jobs:
               
               try {
                 const result = await github.graphql(mutation);
-                console.log('Added item:', title, 'with status:', status);
-                console.log('Result:', result);
+                console.log('Successfully added item:', title, 'with status:', status);
+                console.log('Result:', JSON.stringify(result, null, 2));
               } catch (error) {
                 console.error('Error adding item:', title);
-                console.error('Error:', error);
+                console.error('Error details:', JSON.stringify(error, null, 2));
+                throw error;
               }
             };
 
-            // Add all items to project
-            for (const item of watchItems) {
-              await addToProject(item, "Todo");
-            }
-            
-            for (const item of inProgressItems) {
-              await addToProject(item, "In Progress");
-            }
-            
-            for (const item of completedItems) {
-              await addToProject(item, "Done");
+            // Add items with error handling
+            try {
+              console.log('Starting to add watch items...');
+              for (const item of watchItems) {
+                await addToProject(item, "Todo");
+              }
+              
+              console.log('Starting to add in-progress items...');
+              for (const item of inProgressItems) {
+                await addToProject(item, "In Progress");
+              }
+              
+              console.log('Starting to add completed items...');
+              for (const item of completedItems) {
+                await addToProject(item, "Done");
+              }
+            } catch (error) {
+              console.error('Failed during item creation:', error);
+              throw error;
             }
