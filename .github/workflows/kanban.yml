@@ -34,13 +34,38 @@ jobs:
             const inProgressSection = content.split('## 🎬 In Progress')[1].split('## ✅ Completed')[0].trim();
             const completedSection = content.split('## ✅ Completed')[1]?.trim() || '';
             
-            // Extract items
+            // Extract items with tags
+            const extractTitleAndTag = (item) => {
+              const match = item.match(/(.*?)\s*`(\w+)`$/);
+              if (match) {
+                return {
+                  title: match[1].trim(),
+                  tag: match[2]
+                };
+              }
+              return {
+                title: item,
+                tag: null
+              };
+            };
+
             const watchItems = (watchSection.match(/- \[ \] (.*?)(?=\n|$)/g) || [])
-              .map(item => item.replace('- [ ] ', '').trim());
+              .map(item => {
+                const cleanItem = item.replace('- [ ] ', '').trim();
+                return extractTitleAndTag(cleanItem);
+              });
+
             const inProgressItems = (inProgressSection.match(/- \[.\] (.*?)(?=\n|$)/g) || [])
-              .map(item => item.replace(/- \[.\] /, '').trim());
+              .map(item => {
+                const cleanItem = item.replace(/- \[.\] /, '').trim();
+                return extractTitleAndTag(cleanItem);
+              });
+
             const completedItems = (completedSection.match(/- \[x\] (.*?)(?=\n|$)/g) || [])
-              .map(item => item.replace('- [x] ', '').trim());
+              .map(item => {
+                const cleanItem = item.replace('- [x] ', '').trim();
+                return extractTitleAndTag(cleanItem);
+              });
 
             // First, get the status field options
             const getStatusFieldOptions = async () => {
@@ -71,21 +96,24 @@ jobs:
               return option ? option.id : null;
             };
             
-            const addToProject = async (title, status) => {
-              console.log(`Attempting to add item: "${title}" with status: "${status}"`);
-              const escapedTitle = title.replace(/"/g, '\\"');
+            const addToProject = async (itemData, status) => {
+              console.log(`Attempting to add item: "${itemData.title}" with status: "${status}"`);
+              const escapedTitle = itemData.title.replace(/"/g, '\\"');
+              const description = itemData.tag ? `Type: ${itemData.tag}` : '';
+              const escapedDescription = description.replace(/"/g, '\\"');
               const statusOptionId = getOptionId(status);
               
               if (!statusOptionId) {
                 throw new Error(`Status option not found: ${status}`);
               }
               
-              // First, create the item
+              // Create the item with description
               const createMutation = `
                 mutation {
                   addProjectV2DraftIssue(input: {
                     projectId: "PVT_kwHOCw13Q84Ay6MG"
                     title: "${escapedTitle}"
+                    body: "${escapedDescription}"
                   }) {
                     projectItem {
                       id
@@ -99,7 +127,7 @@ jobs:
                 const itemId = result.addProjectV2DraftIssue.projectItem.id;
                 console.log('Created item:', itemId);
                 
-                // Then update its status
+                // Update its status
                 const updateMutation = `
                   mutation {
                     updateProjectV2ItemFieldValue(input: {
@@ -116,10 +144,10 @@ jobs:
                 `;
                 
                 await github.graphql(updateMutation);
-                console.log('Successfully updated status for:', title);
+                console.log('Successfully updated status for:', itemData.title);
                 
               } catch (error) {
-                console.error('Error processing item:', title);
+                console.error('Error processing item:', itemData.title);
                 console.error('Error details:', JSON.stringify(error, null, 2));
                 throw error;
               }
