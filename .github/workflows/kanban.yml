@@ -25,14 +25,44 @@ jobs:
             const inProgressSection = content.match(/## 🎬 In Progress\n\n([\s\S]*?)(?=\n## |$)/)?.[1] || '';
             const completedSection = content.match(/## ✅ Completed\n\n([\s\S]*?)(?=\n## |$)/)?.[1] || '';
             
-            // Extract items from each section
-            const watchItems = watchSection.match(/- \[ \] (.*)/g) || [];
-            const inProgressItems = inProgressSection.match(/- \[.\] (.*)/g) || [];
-            const completedItems = completedSection.match(/- \[x\] (.*)/g) || [];
+            // Extract items
+            const watchItems = watchSection.match(/- \[ \] (.*)/g)?.map(item => item.replace('- [ ] ', '')) || [];
+            const inProgressItems = inProgressSection.match(/- \[.\] (.*)/g)?.map(item => item.replace('- [.] ', '')) || [];
+            const completedItems = completedSection.match(/- \[x\] (.*)/g)?.map(item => item.replace('- [x] ', '')) || [];
+
+            // GraphQL mutation to add items to project
+            const addToProject = async (title, status) => {
+              const mutation = `
+                mutation {
+                  createProjectV2Item(input: {
+                    projectId: "YOUR_PROJECT_ID"
+                    title: "${title}"
+                    fieldValues: [
+                      {
+                        projectV2CustomFieldId: "YOUR_STATUS_FIELD_ID"
+                        value: "${status}"
+                      }
+                    ]
+                  }) {
+                    projectV2Item {
+                      id
+                    }
+                  }
+                }
+              `;
+              
+              await github.graphql(mutation);
+            };
+
+            // Add all items to project
+            for (const item of watchItems) {
+              await addToProject(item, "Watch");
+            }
             
-            // Update project (You'll need to replace PROJECT_NUMBER with your actual project number)
-            const project_id = 'PROJECT_NUMBER';
+            for (const item of inProgressItems) {
+              await addToProject(item, "In Progress");
+            }
             
-            // Create/Update items in project
-            // Note: You'll need to implement the actual API calls to update the project
-            // GitHub's new Projects API (GraphQL) requires additional setup
+            for (const item of completedItems) {
+              await addToProject(item, "Completed");
+            }
