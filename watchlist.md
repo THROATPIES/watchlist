@@ -6,6 +6,6 @@
  - [ ] The Rookie `show`
  - [ ] The Thirteen Lives `movie`
  - [ ] The Banker `movie` 
- 
+ - [ ] Mom `show`  
 ## 🎬 In Progress
 ## ✅ Completed
