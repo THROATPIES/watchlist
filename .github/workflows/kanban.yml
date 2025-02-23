@@ -56,7 +56,7 @@ jobs:
 
             // Add all items to project
             for (const item of watchItems) {
-              await addToProject(item, "Watch");
+              await addToProject(item, "Todo");
             }
             
             for (const item of inProgressItems) {
@@ -64,5 +64,5 @@ jobs:
             }
             
             for (const item of completedItems) {
-              await addToProject(item, "Completed");
+              await addToProject(item, "Done");
             }
