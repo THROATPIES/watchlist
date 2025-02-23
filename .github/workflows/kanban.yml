@@ -99,7 +99,7 @@ jobs:
             const addToProject = async (itemData, status) => {
               console.log(`Attempting to add item: "${itemData.title}" with status: "${status}"`);
               const escapedTitle = itemData.title.replace(/"/g, '\\"');
-              const description = itemData.tag ? `Type: ${itemData.tag}` : '';
+              const description = itemData.tag ? `Type: ${itemData.tag.toUpperCase()}` : '';
               const escapedDescription = description.replace(/"/g, '\\"');
               const statusOptionId = getOptionId(status);
               
@@ -153,23 +153,136 @@ jobs:
               }
             };
 
-            // Add items with error handling
-            try {
-              console.log('Starting to add watch items...');
+            // Add this function to get existing items from the project
+            const getExistingItems = async () => {
+              const query = `
+                query {
+                  node(id: "PVT_kwHOCw13Q84Ay6MG") {
+                    ... on ProjectV2 {
+                      items(first: 100) {
+                        nodes {
+                          id
+                          title
+                          fieldValues(first: 8) {
+                            nodes {
+                              ... on ProjectV2ItemFieldSingleSelectValue {
+                                name
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              `;
+              
+              const result = await github.graphql(query);
+              return result.node.items.nodes.map(item => ({
+                id: item.id,
+                title: item.title,
+                status: item.fieldValues.nodes.find(n => n.name)?.name || null
+              }));
+            };
+
+            const syncProject = async () => {
+              // Get existing items
+              const existingItems = await getExistingItems();
+              
+              // Helper function to find existing item
+              const findExistingItem = (title) => {
+                return existingItems.find(item => item.title === title);
+              };
+
+              // Process watch items
               for (const item of watchItems) {
-                await addToProject(item, "Todo");
+                const existing = findExistingItem(item.title);
+                if (!existing) {
+                  // Create new item
+                  await addToProject(item, "Todo");
+                } else if (existing.status !== "Todo") {
+                  // Update status if different
+                  await updateItemStatus(existing.id, "Todo");
+                }
               }
-              
-              console.log('Starting to add in-progress items...');
+
+              // Process in-progress items
               for (const item of inProgressItems) {
-                await addToProject(item, "In Progress");
+                const existing = findExistingItem(item.title);
+                if (!existing) {
+                  await addToProject(item, "In Progress");
+                } else if (existing.status !== "In Progress") {
+                  await updateItemStatus(existing.id, "In Progress");
+                }
               }
-              
-              console.log('Starting to add completed items...');
+
+              // Process completed items
               for (const item of completedItems) {
-                await addToProject(item, "Done");
+                const existing = findExistingItem(item.title);
+                if (!existing) {
+                  await addToProject(item, "Done");
+                } else if (existing.status !== "Done") {
+                  await updateItemStatus(existing.id, "Done");
+                }
               }
+
+              // Optionally: Remove items that are no longer in the watchlist
+              const allWatchlistTitles = [
+                ...watchItems.map(i => i.title),
+                ...inProgressItems.map(i => i.title),
+                ...completedItems.map(i => i.title)
+              ];
+
+              for (const existing of existingItems) {
+                if (!allWatchlistTitles.includes(existing.title)) {
+                  await deleteProjectItem(existing.id);
+                }
+              }
+            };
+
+            // Add helper function to update status
+            const updateItemStatus = async (itemId, status) => {
+              const statusOptionId = getOptionId(status);
+              const updateMutation = `
+                mutation {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: "PVT_kwHOCw13Q84Ay6MG"
+                    itemId: "${itemId}"
+                    fieldId: "PVTSSF_lAHOCw13Q84Ay6MGzgoySwo"
+                    value: { singleSelectOptionId: "${statusOptionId}" }
+                  }) {
+                    projectV2Item {
+                      id
+                    }
+                  }
+                }
+              `;
+              
+              await github.graphql(updateMutation);
+            };
+
+            // Add helper function to delete items
+            const deleteProjectItem = async (itemId) => {
+              const deleteMutation = `
+                mutation {
+                  deleteProjectV2Item(input: {
+                    projectId: "PVT_kwHOCw13Q84Ay6MG"
+                    itemId: "${itemId}"
+                  }) {
+                    deletedItemId
+                  }
+                }
+              `;
+              
+              await github.graphql(deleteMutation);
+            };
+
+            // Replace the try-catch block with this:
+            try {
+              console.log('Starting to sync project...');
+              await syncProject();
+              console.log('Project sync completed');
             } catch (error) {
-              console.error('Failed during item creation:', error);
+              console.error('Failed during project sync:', error);
               throw error;
             }
