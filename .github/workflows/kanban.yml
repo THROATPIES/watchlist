@@ -1,0 +1,35 @@
+name: Update Kanban Board
+
+on:
+  push:
+    paths:
+      - 'watchlist.md'
+  workflow_dispatch:
+
+jobs:
+  update-kanban:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Create/Update Project Items
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const content = fs.readFileSync('watchlist.md', 'utf8');
+            
+            // Parse sections
+            const watchSection = content.match(/## 📺 Watch\n\n([\s\S]*?)(?=\n## |$)/)?.[1] || '';
+            const inProgressSection = content.match(/## 🎬 In Progress\n\n([\s\S]*?)(?=\n## |$)/)?.[1] || '';
+            const completedSection = content.match(/## ✅ Completed\n\n([\s\S]*?)(?=\n## |$)/)?.[1] || '';
+            
+            // Extract items from each section
+            const watchItems = watchSection.match(/- \[ \] (.*)/g) || [];
+            const inProgressItems = inProgressSection.match(/- \[.\] (.*)/g) || [];
+            const completedItems = completedSection.match(/- \[x\] (.*)/g) || [];
+            
+            console.log('Watch items:', watchItems);
+            console.log('In Progress items:', inProgressItems);
+            console.log('Completed items:', completedItems);
